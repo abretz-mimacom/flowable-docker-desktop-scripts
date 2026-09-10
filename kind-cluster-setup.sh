@@ -1,14 +1,14 @@
 #!/bin/bash
 set -o errexit
 
-# Sets up a single 3-node kind cluster to host the Flowable Platform's
-# dev/test/stg namespaces (one cluster instead of the original two -
-# "qa" and "prod" - each of which was its own 3-node kind cluster).
-# Keeps the same kind mechanics as before (local registry, DaemonSet
-# ingress controller, optional ARC), just consolidated onto one cluster, with
-# extraPortMappings/extraMounts added to the control-plane node so the
-# ingress is reachable directly on localhost:80/443 without a manual
-# `kubectl port-forward` step.
+# Sets up a single single-node kind cluster to host the Flowable Platform's
+# dev/test/stg namespaces (one cluster instead of the original two - "qa"
+# and "prod" - each of which was its own 3-node kind cluster; the extra
+# nodes weren't buying anything for a local demo, just more containers to
+# run). Keeps the same kind mechanics as before (local registry, DaemonSet
+# ingress controller, optional ARC), just consolidated onto one node, with
+# extraPortMappings/extraMounts on that node so the ingress is reachable
+# directly on localhost:80/443 without a manual `kubectl port-forward` step.
 #
 # Uses Traefik as the ingress controller (ingress-nginx - the
 # kubernetes/ingress-nginx project - is in maintenance mode/being retired
@@ -43,12 +43,13 @@ if ! command -v kind >/dev/null 2>&1; then
   brew install kind derailed/k9s/k9s
 fi
 
-# 2. Create the kind cluster (control-plane node gets the host mounts/ports;
-# two workers, same 3-node shape as before) unless it already exists
+# 2. Create the kind cluster (single node - kind lifts the control-plane's
+# NoSchedule taint automatically when it's the only node, so it happily
+# runs Traefik/ARC/Flowable pods too) unless it already exists
 if kind get clusters 2>/dev/null | grep -qx "$CLUSTER_NAME"; then
   echo "kind cluster '$CLUSTER_NAME' already exists, reusing it"
 else
-  echo "Creating 3-node kind cluster ${CLUSTER_NAME}..."
+  echo "Creating single-node kind cluster ${CLUSTER_NAME}..."
   cat <<EOF | kind create cluster --name "$CLUSTER_NAME" --config=-
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
@@ -65,8 +66,6 @@ nodes:
       - containerPort: 443
         hostPort: 443
         protocol: TCP
-  - role: worker
-  - role: worker
 containerdConfigPatches:
 - |-
   [plugins."io.containerd.grpc.v1.cri".registry]
