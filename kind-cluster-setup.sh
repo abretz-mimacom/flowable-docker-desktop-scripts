@@ -5,10 +5,15 @@ set -o errexit
 # dev/test/stg namespaces (one cluster instead of the original two -
 # "qa" and "prod" - each of which was its own 3-node kind cluster).
 # Keeps the same kind mechanics as before (local registry, DaemonSet
-# ingress-nginx, optional ARC), just consolidated onto one cluster, with
+# ingress controller, optional ARC), just consolidated onto one cluster, with
 # extraPortMappings/extraMounts added to the control-plane node so the
 # ingress is reachable directly on localhost:80/443 without a manual
 # `kubectl port-forward` step.
+#
+# Uses Traefik as the ingress controller (ingress-nginx - the
+# kubernetes/ingress-nginx project - is in maintenance mode/being retired
+# upstream; Traefik is actively maintained and needs no extra CRDs for
+# plain Kubernetes Ingress resources).
 #
 # Usage: ./kind-cluster-setup.sh [CLUSTER_NAME] [DISABLE_ARC]
 
@@ -96,11 +101,14 @@ data:
     help: "https://kind.sigs.k8s.io/docs/user/local-registry/"
 EOF
 
-# 6. Add ingress controller (one install for the whole cluster)
-helm upgrade --install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --set controller.kind=DaemonSet --set controller.hostPort.enabled=true --set controller.publishService.enabled=false --namespace ingress-nginx --create-namespace
+# 6. Add ingress controller (Traefik, one install for the whole cluster).
+# DaemonSet + hostPort (instead of the chart's default LoadBalancer Service,
+# which kind can't fulfill) so the control-plane node's extraPortMappings
+# above forward host 80/443 straight into the Traefik pod on that node.
+helm upgrade --install traefik traefik --repo https://traefik.github.io/charts --set deployment.kind=DaemonSet --set ports.web.hostPort=80 --set ports.websecure.hostPort=443 --set service.type=ClusterIP --namespace traefik --create-namespace
 
-echo "Waiting for ingress controller webhook service to be ready"
-sleep 15
+echo "Waiting for the Traefik ingress controller to be ready"
+kubectl -n traefik rollout status daemonset/traefik --timeout=180s || sleep 15
 
 # 7. Add github action runner (opt-in)
 echo

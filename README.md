@@ -1,13 +1,14 @@
 # flowable-docker-desktop-scripts
 
-Deployment scripts for running the Flowable Platform locally on Docker
-Desktop's built-in Kubernetes (single node, one cluster, `dev`/`test`/`stg`
-namespaces). Used as a git submodule by `flowable-deploy-template-local`.
+Deployment scripts for running the Flowable Platform locally on a single
+`kind` cluster (`dev`/`test`/`stg` namespaces), backed by Docker Desktop (or
+any Docker engine `kind` supports). Used as a git submodule by
+`flowable-deploy-template-local`.
 
-1) Enable Kubernetes in Docker Desktop (Settings -> Kubernetes -> Enable
-   Kubernetes), then set up the cluster (ingress-nginx, optionally ARC):
+1) Set up the cluster (kind cluster, local registry, Traefik,
+   optionally ARC):
 
-   `% scripts/docker-desktop-cluster-setup.sh`
+   `% scripts/kind-cluster-setup.sh`
 
 2) Deploy Flowable into a namespace:
 
