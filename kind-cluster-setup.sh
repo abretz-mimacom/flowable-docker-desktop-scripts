@@ -1,0 +1,112 @@
+#!/bin/bash
+set -o errexit
+
+# Sets up a single 3-node kind cluster to host the Flowable Platform's
+# dev/test/stg namespaces (one cluster instead of the original two -
+# "qa" and "prod" - each of which was its own 3-node kind cluster).
+# Keeps the same kind mechanics as before (local registry, DaemonSet
+# ingress-nginx, optional ARC), just consolidated onto one cluster, with
+# extraPortMappings/extraMounts added to the control-plane node so the
+# ingress is reachable directly on localhost:80/443 without a manual
+# `kubectl port-forward` step.
+#
+# Usage: ./kind-cluster-setup.sh [CLUSTER_NAME] [DISABLE_ARC]
+
+PROJECT_DIR="${GITHUB_WORKSPACE:-$(pwd)}"
+SCRIPTS_DIR="${SCRIPTS_DIR:-$PROJECT_DIR/scripts}"
+CLUSTER_NAME="${1:-local}"
+DISABLE_ARC="${2:-true}"
+EXTRA_MOUNT_HOST_PATH="${EXTRA_MOUNT_HOST_PATH:-$PROJECT_DIR/docker}"
+
+# 1. Create registry container unless it already exists
+reg_name='kind-registry'
+reg_port='5001'
+if [ "$(docker inspect -f '{{.State.Running}}' "${reg_name}" 2>/dev/null || true)" != 'true' ]; then
+  docker run \
+    -d --restart=always -p "127.0.0.1:${reg_port}:5000" --network bridge --name "${reg_name}" \
+    registry:2
+fi
+
+if ! command -v kind >/dev/null 2>&1; then
+  echo "kind not found, installing..."
+  if ! command -v brew >/dev/null 2>&1; then
+    echo "Homebrew not found, installing..."
+    NONINTERACTIVE=1 bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> ~/.bashrc
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+  fi
+  brew install kind derailed/k9s/k9s
+fi
+
+# 2. Create the kind cluster (control-plane node gets the host mounts/ports;
+# two workers, same 3-node shape as before) unless it already exists
+if kind get clusters 2>/dev/null | grep -qx "$CLUSTER_NAME"; then
+  echo "kind cluster '$CLUSTER_NAME' already exists, reusing it"
+else
+  echo "Creating 3-node kind cluster ${CLUSTER_NAME}..."
+  cat <<EOF | kind create cluster --name "$CLUSTER_NAME" --config=-
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: "${CLUSTER_NAME}"
+nodes:
+  - role: control-plane
+    extraMounts:
+      - hostPath: "${EXTRA_MOUNT_HOST_PATH}"
+        containerPath: /extra-mount
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 443
+        protocol: TCP
+  - role: worker
+  - role: worker
+containerdConfigPatches:
+- |-
+  [plugins."io.containerd.grpc.v1.cri".registry]
+    config_path = "/etc/containerd/certs.d"
+EOF
+fi
+
+# 3. Add the registry config to the nodes
+REGISTRY_DIR="/etc/containerd/certs.d/localhost:${reg_port}"
+for node in $(kind get nodes --name "$CLUSTER_NAME"); do
+  docker exec "${node}" mkdir -p "${REGISTRY_DIR}"
+  cat <<EOF | docker exec -i "${node}" cp /dev/stdin "${REGISTRY_DIR}/hosts.toml"
+[host."http://${reg_name}:5000"]
+EOF
+done
+
+# 4. Connect the registry to the cluster network if not already connected
+if [ "$(docker inspect -f='{{json .NetworkSettings.Networks.kind}}' "${reg_name}")" = 'null' ]; then
+  docker network connect "kind" "${reg_name}"
+fi
+
+# 5. Document the local registry
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: local-registry-hosting
+  namespace: kube-public
+data:
+  localRegistryHosting.v1: |
+    host: "localhost:${reg_port}"
+    help: "https://kind.sigs.k8s.io/docs/user/local-registry/"
+EOF
+
+# 6. Add ingress controller (one install for the whole cluster)
+helm upgrade --install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --set controller.kind=DaemonSet --set controller.hostPort.enabled=true --set controller.publishService.enabled=false --namespace ingress-nginx --create-namespace
+
+echo "Waiting for ingress controller webhook service to be ready"
+sleep 15
+
+# 7. Add github action runner (opt-in)
+echo
+echo "DISABLE_ARC value is $DISABLE_ARC".
+if [ "$DISABLE_ARC" != true ]; then
+  echo "Setting up GitHub Action Runner to run inside cluster."
+  echo
+  "$SCRIPTS_DIR/add-github-action-runner.sh" "$CLUSTER_NAME"
+fi
