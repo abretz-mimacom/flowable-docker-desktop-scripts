@@ -45,28 +45,6 @@ else
   source "$SCRIPTS_DIR/create-ns-secrets.sh" "$NAMESPACE" "$RELEASE_NAME"
 fi
 
-# stg's Work/Control envSecrets reference a flowable-github-oauth secret
-# (see helm/stg/values.yaml, helm/templates/oauth2-configmap.yaml) for its
-# GitHub OAuth2 login demo - nothing else creates it, so without this the
-# pods sit in CreateContainerConfigError/"secret not found".
-if [ "$NAMESPACE" = "stg" ]; then
-  if [ -n "$OAUTH_CLIENT_ID" ] && [ -n "$OAUTH_CLIENT_SECRET" ]; then
-    echo
-    echo "Creating/updating flowable-github-oauth secret in namespace $NAMESPACE"
-    kubectl create secret generic flowable-github-oauth \
-      --from-literal=clientId="$OAUTH_CLIENT_ID" \
-      --from-literal=clientSecret="$OAUTH_CLIENT_SECRET" \
-      --namespace "$NAMESPACE" \
-      --dry-run=client -o yaml | kubectl apply -f -
-  else
-    echo
-    echo "Warning: OAUTH_CLIENT_ID/OAUTH_CLIENT_SECRET are not set - stg's"
-    echo "flowable-work/flowable-control pods will fail to start until you"
-    echo "export both and re-run, or create the 'flowable-github-oauth'"
-    echo "secret in namespace $NAMESPACE yourself (keys: clientId, clientSecret)."
-  fi
-fi
-
 # Add the Flowable Helm repo (--force-update so repeat calls - e.g. once per
 # namespace from create-env.sh --all - don't fail with "repository name
 # (flowable) already exists")
