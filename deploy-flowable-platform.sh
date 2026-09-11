@@ -55,7 +55,10 @@ helm repo add flowable https://repo.flowable.com/flowable-helm \
 
 helm repo update
 
-helm dependency build "$PROJECT_DIR/helm/"
+# `update` (not `build`) so a stale/out-of-sync Chart.lock - e.g. after
+# Chart.yaml's dependency version was bumped - is just re-resolved and
+# rewritten instead of failing with "Chart.lock is out of sync"
+helm dependency update "$PROJECT_DIR/helm/"
 
 # Install or upgrade the Flowable platform chart from local ./helm directory
 helm upgrade --install "$RELEASE_NAME" "$PROJECT_DIR/helm/" -f "$PROJECT_DIR/helm/$NAMESPACE/values.yaml" \
