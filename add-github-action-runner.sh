@@ -5,6 +5,16 @@ CLUSTER_NAME="${1:-local}"
 PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
 SCRIPTS_DIR="${SCRIPTS_DIR:-$PROJECT_DIR/scripts}"
 
+# $GITHUB_REPOSITORY is set automatically inside a GitHub Actions job, but not
+# when this script is run locally - default it so the RunnerDeployment below
+# doesn't end up with an empty `repository` field.
+GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-abretz-mimacom/flowable-models-deploy}"
+if [ -z "$GITHUB_REPOSITORY" ]; then
+  echo "Error: GITHUB_REPOSITORY must be set to the target repo (owner/repo) for the self-hosted runner."
+  exit 1
+fi
+echo "Registering the self-hosted runner against repository: $GITHUB_REPOSITORY"
+
 echo
 echo
 echo "Setting up Cert Manager in Kubernetes"
@@ -47,7 +57,6 @@ helm upgrade --install actions-runner-controller \
 kubectl -n actions-runner-system rollout status deploy/actions-runner-controller --timeout=180s
 
 echo "Waiting for ARC controller webhook service to be ready"
-ehco
 sleep 15
 
 
