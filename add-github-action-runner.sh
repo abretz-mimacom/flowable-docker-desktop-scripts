@@ -88,10 +88,10 @@ metadata:
   name: gh-runner-read-cluster
 rules:
   - apiGroups: ["", "apps", "ci"]
-    resources: ["pods", "configmaps", "secrets", "services", "deployments", "replicasets", "namespaces", "statefulsets", "daemonsets", "jobs", "cronjobs", "ingresses", "networkpolicies", "pods", "pods/log", "pods/exec", "serviceaccounts", "persistentvolumeclaims"]
+    resources: ["pods", "configmaps", "secrets", "services", "deployments", "replicasets", "namespaces", "statefulsets", "daemonsets", "jobs", "cronjobs", "pods", "pods/log", "pods/exec", "serviceaccounts", "persistentvolumeclaims"]
     verbs: ["get","list","watch","create","update","patch","delete"]
   - apiGroups: ["networking.k8s.io"]
-    resources: ["networkpolicies"]
+    resources: ["ingresses", "networkpolicies"]
     verbs: ["get","list","watch","create","update","patch","delete"]
   - apiGroups: ["policy"]
     resources: ["poddisruptionbudgets"]
