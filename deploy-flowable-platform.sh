@@ -45,10 +45,13 @@ else
   source "$SCRIPTS_DIR/create-ns-secrets.sh" "$NAMESPACE" "$RELEASE_NAME"
 fi
 
-# Add the Flowable Helm repo
+# Add the Flowable Helm repo (--force-update so repeat calls - e.g. once per
+# namespace from create-env.sh --all - don't fail with "repository name
+# (flowable) already exists")
 helm repo add flowable https://repo.flowable.com/flowable-helm \
     --username "$FLOWABLE_REPO_USER" \
-    --password "$FLOWABLE_REPO_PASSWORD"
+    --password "$FLOWABLE_REPO_PASSWORD" \
+    --force-update
 
 helm repo update
 
