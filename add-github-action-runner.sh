@@ -7,8 +7,11 @@ SCRIPTS_DIR="${SCRIPTS_DIR:-$PROJECT_DIR/scripts}"
 
 # $GITHUB_REPOSITORY is set automatically inside a GitHub Actions job, but not
 # when this script is run locally - default it so the RunnerDeployment below
-# doesn't end up with an empty `repository` field.
-GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-abretz-mimacom/flowable-models-deploy}"
+# doesn't end up with an empty `repository` field. Must match whichever repo's
+# workflow actually references runs-on: [self-hosted, ...] - for this repo
+# that's flowable-deploy-template-local itself (see
+# .github/workflows/deploy-dev-qa.yml), not a downstream/consumer repo.
+GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-abretz-mimacom/flowable-deploy-template-local}"
 if [ -z "$GITHUB_REPOSITORY" ]; then
   echo "Error: GITHUB_REPOSITORY must be set to the target repo (owner/repo) for the self-hosted runner."
   exit 1
